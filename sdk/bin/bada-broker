@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /home/alexius/.local/bin/python2 "/home/alexius/Projects/ReBadaSDK/sdk/scripts/broker.py" "$@"

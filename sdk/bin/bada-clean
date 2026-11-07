@@ -1,0 +1,6 @@
+#!/bin/sh
+ROOT="/home/alexius/Projects/ReBadaSDK"
+source "$ROOT/sdk/init.sh"
+proj="${1:-.}"
+cd "$proj"
+make clean

@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+ROOT="/home/alexius/Projects/ReBadaSDK"
+name="${1:?usage: bada-new app-name [app-id]}"
+id="${2:-$1}"
+target="$ROOT/sdk/examples/$name"
+rm -rf "$target"
+cp -a "$ROOT/sdk/examples/hello-from-2026" "$target"
+rm -rf "$target/build" "$target/2026hllo/Info"/*.htb
+sed -i "s#<Id>2026hllo</Id>#<Id>$id</Id>#" "$target/2026hllo/Info/manifest.xml"
+sed -i "s/APPNAME := hello2026/APPNAME := $name/" "$target/Makefile"
+sed -i "s/title=\"Hello From 2026\"/title=\"$name\"/" "$target/2026hllo/Res/240x400/IDF_FORM1.xml" 2>/dev/null || true
+if [ -d "$target/2026hllo" ] && [ "$id" != "2026hllo" ]; then
+  mv "$target/2026hllo" "$target/$id"
+  sed -i "s/^APPID   := .*/APPID   := $id/" "$target/Makefile"
+fi
+echo "Created $target"
+echo "Build with: cd $target && bada-build"

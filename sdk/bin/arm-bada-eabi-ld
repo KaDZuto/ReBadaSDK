@@ -1,0 +1,2 @@
+#!/bin/sh
+exec "/home/alexius/.local/share/Steam/steamapps/common/Proton 11.0/files/bin/wine" "/home/alexius/Projects/ReBadaSDK/ex/bada os dev/bada_SDK_2.0.6_Common/Tools/Toolchains/ARM/bin/arm-bada-eabi-ld.exe" "$@"

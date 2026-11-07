@@ -1,0 +1,32 @@
+#!/bin/sh
+ROOT="/home/alexius/Projects/ReBadaSDK"
+source "$ROOT/sdk/init.sh"
+case "${1:-help}" in
+  devices)
+    ls -l /dev/ttyACM* 2>/dev/null || echo "no Bada serial devices found"
+    ;;
+  install)
+    appdir="${2:?usage: badb install appdir app.exe}"
+    appexe="${3:?usage: badb install appdir app.exe}"
+    "$ROOT/sdk/bin/bada-broker" install "$appdir" "$appexe"
+    ;;
+  push)
+    src="${2:?usage: badb push src dst}"; dst="${3:?}"
+    cp -v "$src" "$dst"
+    ;;
+  run)
+    shift
+    "$ROOT/sdk/bin/bada-broker" "$@"
+    ;;
+  logcat)
+    tail -f "$PWD/broker.log"
+    ;;
+  *)
+    echo "badb (Bada device bridge)"
+    echo "  badb devices"
+    echo "  badb install <appdir> <app.exe>"
+    echo "  badb push <src> <dst>"
+    echo "  badb run <broker args>"
+    echo "  badb logcat"
+    ;;
+esac

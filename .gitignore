@@ -1,0 +1,20 @@
+# Извлечённый proprietary Samsung SDK (слишком большой, хранить локально)
+/ex/
+*.zip
+
+# Тулчейн и сгенерированное
+/sdk/arm-bada-eabi
+/sdk/usr/share/bada
+/sdk/tools-bin
+/sdk/examples/*/build
+/sdk/examples/*/*/Bin
+/sdk/examples/*/*/Info/*.htb
+/sdk/examples/*/*/signature.xml
+*.o
+*.exe
+*.htb
+broker.log
+
+# IDE
+.idea/
+*.iml
