@@ -1,82 +1,95 @@
 # ReBadaSDK
 
-Linux-hosted среда разработки нативных программ для Samsung Bada.
+Сборка и установка нативных приложений Samsung Bada 1.x с Linux-хоста.
+Кросс-тулчейн `arm-bada-eabi` работает под Wine/Proton, пакет собирается
+локально: `htb` → подпись → `AppPkgInstall` по диагностическому каналу.
 
-Цель проекта — собирать Bada-приложения без Windows-IDE: через GNU/Linux, cross-toolchain `arm-bada-eabi` и небольшие утилиты для генерации htb, подписи и установки.
+Проверено на GT-S5250 (Wave 525, Bada 1.1): пример `sdk/examples/privet`
+(белый экран, «Привет с Линукса») собирается, устанавливается и запускается.
 
-## Что внутри
+## Состав
 
-- `sdk/init.sh` — активация SDK.
-- `sdk/bin/` — обёртки для компилятора, `genhtb`, подписи, broker и удобные команды: `bada-build`, `bada-clean`, `bada-verify`, `bada-new`, `badb`.
-- `sdk/scripts/` — Python-утилиты `genhtb.py`, `signing.py`, `broker.py`.
-- `sdk/examples/hello-from-2026/` — готовый пример приложения "Hello From 2026".
-- `DEVELOPMENT.md` — инструкции по разработке.
+- `sdk/init.sh` — окружение (`SDK_ROOT`, `PATH`, `CROSS_COMPILE`).
+- `sdk/bin/` — компилятор, `bada-genhtb`, `bada-signing`, `bada-broker`,
+  `bada-build`, `bada-clean`, `bada-verify`, `bada-new`, `badb`.
+- `sdk/scripts/` — `genhtb.py`, `signing.py`, `broker.py`.
+- `sdk/examples/hello-from-2026` — минимальный пример.
+- `sdk/examples/privet` — пример с собственным экраном.
+- `docs/REVERSE_ENGINEERING.md` — разбор формата пакета и подписи,
+  история ошибок установки.
 
 ## Требования
 
-Нужен локально извлечённый Samsung Bada SDK (`bada_SDK_2.0.6`) и Wine/Proton для запуска bundled Windows cross-toolchain. Дополнительно: Python 2, OpenSSL, make.
+- Локально извлечённый Bada SDK 2.0.6 (`ex/`), см. `.gitignore`.
+- Wine или Proton: тулчейн поставляется как Windows `.exe`.
+- Python 2 (`broker`, `genhtb`, `signing`), Python 3 + `cryptography`
+  (только для ручной проверки подписи), `openssl`, `make`.
 
-## Подготовка
-
-```sh
-cd /home/alexius/Projects/ReBadaSDK
-# предполагается, что Windows SDK извлечён в ex/
-source sdk/init.sh
-${CROSS_COMPILE}gcc --version
-```
-
-## Сборка примера
+## Сборка
 
 ```sh
 source sdk/init.sh
-cd sdk/examples/hello-from-2026
+cd sdk/examples/privet
 make
 ```
 
 Результат:
 
-- `2026hllo/Bin/hello2026.exe`
-- `2026hllo/Info/hello2026.htb`
-- `2026hllo/signature.xml`
+- `prvlnx2026/Bin/privet.exe`
+- `prvlnx2026/Info/privet.htb`
+- `prvlnx2026/Info/appSign.sys`
+- `prvlnx2026/Info/signerCert.sys`
+- `prvlnx2026/Signature.xml`
 
-Быстрее:
-
-```sh
-source sdk/init.sh
-bada-build sdk/examples/hello-from-2026
-bada-verify sdk/examples/hello-from-2026
-```
-
-## Новый проект
+Новый проект:
 
 ```sh
 source sdk/init.sh
 bada-new myapp myappid
 cd sdk/examples/myapp
-bada-build .
+make
 ```
 
-## Установка на устройство
+## Формат пакета
 
-Подключите телефон через USB, затем:
+Устройство принимает только формат production-пакета:
+
+- `Package` — RSA PKCS#1 v1.5 над 20-байтным SHA1(`exe || manifest`),
+  **без** ASN.1 DigestInfo.
+- `AppSignature` — RSA PKCS#1 v1.5 над SHA1(`htb`).
+- `Info/appSign.sys` — base64 от `AppSignature` (172 байта).
+- `Info/signerCert.sys` — DER сертификата разработчика.
+- `Signature.xml` — в корне каталога приложения (имя с заглавной `S`).
+- `FileList` — `/bin/<app>.exe`, `/info/manifest.xml` (строчными).
+
+`signing.py` собирает всё это за один вызов; встроенные test-сертификаты
+SDK (`badaDev.cer`, `badaCA.cer`) прошивка принимает.
+
+## Установка
+
+Телефон подключён по USB, включён режим Kies/диагностики:
 
 ```sh
 badb devices
-badb install myappid myapp.exe
+badb install prvlnx2026 privet.exe
 ```
 
-Логи обмена:
+`bada-broker` сам находит пару `/dev/ttyACM*`, заливает каталог приложения,
+выполняет `AppPkgInstall` и запускает процесс. Альтернативы:
 
 ```sh
-badb logcat
+badb deploy <appdir> <app.exe>   # appRun без AppPkgInstall
+badb donors                      # список установленных приложений
 ```
 
-## Загрузка файлов
+## Ограничения
 
-```sh
-badb push ./file.txt /dest/path
-```
+- Внутренний `/Osp` около 20 МБ; крупные игры не помещаются.
+- `/Osp/Mount/Mmc` в режиме Kies не виден, установка на microSD требует
+  другого режима.
+- Пакеты Bada 2.0 (`APIVersion 2.0`) на Bada 1.1 не рассчитаны.
 
 ## Лицензия
 
-В репозиторий не включаются proprietary-файлы Samsung. Для полноценной работы нужен собственный экземпляр Bada SDK.
+Proprietary-файлы Samsung в репозиторий не входят. Для работы нужен
+собственный экземпляр Bada SDK.

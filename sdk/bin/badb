@@ -14,6 +14,21 @@ case "${1:-help}" in
     src="${2:?usage: badb push src dst}"; dst="${3:?}"
     cp -v "$src" "$dst"
     ;;
+  donors)
+    "$ROOT/sdk/bin/bada-broker" donors
+    ;;
+  deploy)
+    appdir="${2:?usage: badb deploy appdir app.exe}"
+    appexe="${3:?usage: badb deploy appdir app.exe}"
+    "$ROOT/sdk/bin/bada-broker" deploy "$(basename "$appdir")" "$appdir" "$appexe"
+    ;;
+  spoof)
+    donor="${2:?usage: badb spoof donor-id donor.exe appdir app.exe}"
+    donorexe="${3:?usage: badb spoof donor-id donor.exe appdir app.exe}"
+    appdir="${4:?usage: badb spoof donor-id donor.exe appdir app.exe}"
+    appexe="${5:?usage: badb spoof donor-id donor.exe appdir app.exe}"
+    "$ROOT/sdk/bin/bada-broker" spoof "$donor" "$donorexe" "$appdir" "$appexe"
+    ;;
   run)
     shift
     "$ROOT/sdk/bin/bada-broker" "$@"
@@ -24,7 +39,11 @@ case "${1:-help}" in
   *)
     echo "badb (Bada device bridge)"
     echo "  badb devices"
-    echo "  badb install <appdir> <app.exe>"
+    echo "  badb donors                       list installed apps usable as signature donors"
+    echo "  badb deploy <appdir> <app.exe>    push package and launch via appRun"
+    echo "  badb spoof <donor-id> <donor.exe> <appdir> <app.exe>"
+    echo "                                    Bada 1.x: overwrite donor exe/Res and launch"
+    echo "  badb install <appdir> <app.exe>   full AppPkgInstall (needs valid signature)"
     echo "  badb push <src> <dst>"
     echo "  badb run <broker args>"
     echo "  badb logcat"

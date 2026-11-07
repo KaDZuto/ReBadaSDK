@@ -3,5 +3,5 @@ ROOT="/home/alexius/Projects/ReBadaSDK"
 proj="${1:-.}"
 exe=$(find "$proj" -path '*/Bin/*.exe' | head -1)
 htb=$(find "$proj" -path '*/Info/*.htb' | head -1)
-sig=$(find "$proj" -name 'signature.xml' | head -1)
+sig=$(find "$proj" -iname 'signature.xml' | head -1)
 test -n "$exe" && test -f "$exe" && test -n "$htb" && test -f "$htb" && test -n "$sig" && test -f "$sig" && echo "OK: $exe $htb $sig" || { echo "VERIFY FAILED"; exit 1; }

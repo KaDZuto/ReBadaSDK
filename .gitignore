@@ -1,6 +1,7 @@
 # Извлечённый proprietary Samsung SDK (слишком большой, хранить локально)
 /ex/
 *.zip
+*.7z
 
 # Тулчейн и сгенерированное
 /sdk/arm-bada-eabi
@@ -9,12 +10,23 @@
 /sdk/examples/*/build
 /sdk/examples/*/*/Bin
 /sdk/examples/*/*/Info/*.htb
+/sdk/examples/*/*/Info/appSign.sys
+/sdk/examples/*/*/Info/signerCert.sys
 /sdk/examples/*/*/signature.xml
+/sdk/examples/*/*/Signature.xml
 *.o
 *.exe
 *.htb
+*.pyc
 broker.log
 
 # IDE
 .idea/
 *.iml
+
+# Локальные черновики, сертификаты и staging
+/cert-test/
+/polezno.txt
+/J2ME/**/build/
+/J2ME/install.log
+/J2ME/native-app/

@@ -54,8 +54,20 @@ def readStringz(strg, start = 0):
 class SamsungWave:
 	"""A class to talk to your phone"""
 	def __init__(self, port = '/dev/ttyACM0'):
-		"""Yes, this is the constructor. It opens the port, which by default
-		is /dev/ttyACM0, as the device appears on my computer under this name."""
+		"""Open the AT/debug pair, auto-detecting it after USB re-enumeration."""
+		if not os.path.exists(port):
+			import glob
+			cands = []
+			for p in glob.glob('/dev/ttyACM*'):
+				m = re.search(r'(\d+)$', p)
+				if m and int(m.group(1)) % 2 == 0:
+					cands.append((int(m.group(1)), p))
+			if cands:
+				cands.sort()
+				port = cands[0][1]
+				print 'Using port %s' % port
+		m = re.search(r'^(.*/ttyACM)(\d+)$', port)
+		xport = (m.group(1) + str(int(m.group(2)) + 1)) if m else '/dev/ttyACM1'
 		# dsrdtr is ignored on Linux, but here it is included to remind you that the
 		# original broker enables it
 		self._ser = serial.Serial(port, 115200, timeout = 1, dsrdtr = 1, rtscts = 1)
@@ -64,7 +76,7 @@ class SamsungWave:
 		self._recbufs = { 'AT+': [], 'raw': [], 'PHONESTATUS': [], 'PROCESSMGR': [], 'debug': [] }
 		self._recbufsx = { 'AT+': [], 'raw': [], 'PHONESTATUS': [], 'PROCESSMGR': [], 'debug': [] }
 		self._logf = file('broker.log', 'w')
-		self._serx = serial.Serial('/dev/ttyACM1', 115200, timeout = 1, dsrdtr = 1, rtscts = 1)
+		self._serx = serial.Serial(xport, 115200, timeout = 1, dsrdtr = 1, rtscts = 1)
 		self._serx.write('AT+WINCOMM\r')
 		self._serx.flushInput()
 		self._serx.flushOutput()
@@ -282,18 +294,25 @@ class SamsungWave:
 			print "Warning: sendFile close:", ans
 	
 	def getFile(self, localFileName, remoteFileName):
-		"""
-		"""
-		f = open(localFileName, 'w')
-		ans = self._fileCommand(self._FILE_OPEN, "%s\x00" % remoteFileName)
-		if ans[0] != 0:
+		"""Download a single 1 KiB chunk of a remote file.
+
+		The Wave 525 diag channel drops/re-enumerates after the first read,
+		so only one _FILE_READ is issued and no _FILE_CLOSE follows it.
+		Use only for small files (<= 1024 bytes)."""
+		f = open(localFileName, 'wb')
+		ans = self._fileCommand(self._FILE_OPEN, struct.pack('<I', 0) + "%s\x00" % remoteFileName)
+		if ans[0] < 0:
 			print "Error: getFile:", ans
-			return
-		if ans[1:3] != (3, 6):
-			print "Warning: getFile:", ans
-		ans = self._fileCommand(self._FILE_READ)
-		print ans
-		ans = self._fileCommand(self._FILE_CLOSE)
+			f.close()
+			return None
+		rr = self._fileCommand(self._FILE_READ)
+		data = rr[3]
+		if len(data) >= 4:
+			n = struct.unpack('<I', data[:4])[0]
+			data = data[4:4 + n]
+		f.write(data)
+		f.close()
+		return len(data)
 
 	def deleteFile(self, remoteFileName):
 		"""Deletes a file on your phone"""
@@ -415,9 +434,112 @@ def install(appid, exename):
 		print 'Exiting due to keyboard interrupt'
 	return 
 
+def _waitDevice(wave, tries = 25):
+	"""Wait until the AT channel answers after a reboot/re-enumeration."""
+	import time
+	for i in range(tries):
+		if wave.getModel() == 'GT-S5250':
+			return True
+		time.sleep(1)
+	return False
+
+def pushTree(wave, localDir, remoteRoot):
+	"""Upload a directory tree, creating remote dirs first."""
+	for d in ['/Osp', '/Osp/Applications', remoteRoot]:
+		wave.createDirectory(d)
+	for dirname, dirnames, filenames in os.walk(localDir):
+		for sub in dirnames:
+			rel = os.path.relpath(os.path.join(dirname, sub), localDir)
+			wave.createDirectory(remoteRoot + '/' + rel)
+	for dirname, dirnames, filenames in os.walk(localDir):
+		for fn in filenames:
+			rel = os.path.relpath(os.path.join(dirname, fn), localDir)
+			print 'put %s' % rel
+			wave.sendFile(os.path.join(dirname, fn), remoteRoot + '/' + rel)
+
+def listDonors():
+	"""List installed apps (potential signature donors) and their entry binaries."""
+	wave = SamsungWave()
+	if not _waitDevice(wave):
+		print 'Device not ready'
+		return
+	print wave.getModel()
+	for ent in wave.readDirectory('/Osp/Applications'):
+		if ent[0] != 2 or ent[2] in ('.', '..'):
+			continue
+		appid = ent[2]
+		try:
+			exes = [e[2] for e in wave.readDirectory('/Osp/Applications/' + appid + '/Bin')
+					if e[0] == 1 and e[2].lower().endswith('.exe')]
+		except Exception:
+			exes = []
+		print '%s\t%s' % (appid, ', '.join(exes) if exes else '-')
+
+def deployDirect(appid, localDir, exeName):
+	"""Push an app package to /Osp/Applications/<appid> and appRun it.
+
+	Skips AppPkgInstall, so no signature/DUID check happens. This is the
+	Bada 1.x debug-launch path; the app is not registered in the app DB."""
+	wave = SamsungWave()
+	if not _waitDevice(wave):
+		print 'Device not ready'
+		return
+	print wave.getModel()
+	wave.appTerminate(appid)
+	pushTree(wave, localDir, '/Osp/Applications/' + appid)
+	print 'run %s' % exeName
+	wave.appRun(appid, exeName)
+	print 'appRun sent; check the phone screen'
+
+def spoof(donor, donorExe, localDir, localExe):
+	"""Bada 1.x spoofing: replace a signed donor's entry binary and resources.
+
+	The donor's Info/ (manifest, htb, signature.xml, signerCert.sys) is left
+	untouched; only Bin/<donorExe> and Res/ are overwritten. Reversible only by
+	reinstalling the donor, so back it up beforehand if possible."""
+	wave = SamsungWave()
+	if not _waitDevice(wave):
+		print 'Device not ready'
+		return
+	print wave.getModel()
+	base = '/Osp/Applications/' + donor
+	wave.appTerminate(donor)
+	res = os.path.join(localDir, 'Res')
+	if os.path.isdir(res):
+		wave.createDirectory(base + '/Res')
+		for dirname, dirnames, filenames in os.walk(res):
+			for sub in dirnames:
+				rel = os.path.relpath(os.path.join(dirname, sub), res)
+				wave.createDirectory(base + '/Res/' + rel)
+		for dirname, dirnames, filenames in os.walk(res):
+			for fn in filenames:
+				rel = os.path.relpath(os.path.join(dirname, fn), res)
+				print 'put Res/%s' % rel
+				wave.sendFile(os.path.join(dirname, fn), base + '/Res/' + rel)
+	src = os.path.join(localDir, 'Bin', localExe)
+	print 'put Bin/%s as %s' % (localExe, donorExe)
+	wave.sendFile(src, base + '/Bin/' + donorExe)
+	print 'run %s' % donorExe
+	wave.appRun(donor, donorExe)
+	print 'spoof done; check the phone screen'
+
 def main():
 	if len(sys.argv) >= 2:
-		if sys.argv[1] == 'rmdir':
+		if sys.argv[1] == 'donors':
+			listDonors()
+			exit(0)
+		elif sys.argv[1] == 'deploy':
+			deployDirect(sys.argv[2], sys.argv[3], sys.argv[4])
+			exit(0)
+		elif sys.argv[1] == 'spoof':
+			spoof(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5])
+			exit(0)
+		elif sys.argv[1] == 'run':
+			wave = SamsungWave()
+			_waitDevice(wave)
+			wave.appRun(sys.argv[2], sys.argv[3])
+			exit(0)
+		elif sys.argv[1] == 'rmdir':
 			wave = SamsungWave()
 			for dirname in sys.argv[2:]:
 				wave.deleteDirectory(dirname)

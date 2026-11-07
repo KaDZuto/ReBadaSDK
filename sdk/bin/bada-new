@@ -9,6 +9,9 @@ cp -a "$ROOT/sdk/examples/hello-from-2026" "$target"
 rm -rf "$target/build" "$target/2026hllo/Info"/*.htb
 sed -i "s#<Id>2026hllo</Id>#<Id>$id</Id>#" "$target/2026hllo/Info/manifest.xml"
 sed -i "s/APPNAME := hello2026/APPNAME := $name/" "$target/Makefile"
+# application.xml: Entry must match the executable name produced by the build
+app_entry="$name"
+sed -i "s#<Entry>.*</Entry>#<Entry>$app_entry</Entry>#" "$target"/*/Info/application.xml 2>/dev/null || true
 sed -i "s/title=\"Hello From 2026\"/title=\"$name\"/" "$target/2026hllo/Res/240x400/IDF_FORM1.xml" 2>/dev/null || true
 if [ -d "$target/2026hllo" ] && [ "$id" != "2026hllo" ]; then
   mv "$target/2026hllo" "$target/$id"

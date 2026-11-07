@@ -18,7 +18,7 @@ bada_appdir        := $(APPID)
 bada_appexe        := $(bada_appdir)/Bin/$(APPNAME).exe
 bada_manifest      := $(bada_appdir)/Info/manifest.xml
 bada_hashtable     := $(bada_appdir)/Info/$(APPNAME).htb
-bada_signature     := $(bada_appdir)/signature.xml
+bada_signature     := $(bada_appdir)/Signature.xml
 
 cxx_sources        := $(wildcard *.cpp)
 c_sources          := $(wildcard *.c)
@@ -69,5 +69,5 @@ install: all
 -include $(deps)
 
 clean:
-	rm -f $(cxx_objs) $(c_objs) $(bada_appexe) $(bada_hashtable) $(bada_signature) $(deps)
+	rm -f $(cxx_objs) $(c_objs) $(bada_appexe) $(bada_hashtable) $(bada_signature) $(bada_appdir)/Info/appSign.sys $(bada_appdir)/Info/signerCert.sys $(deps)
 .PHONY: clean
